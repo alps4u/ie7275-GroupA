@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "icu_forecast"
+version = "0.1.0"
+description = "Predicting unplanned ward-to-ICU transfers within 24 and 48 hours (MIMIC-IV v3.1)"
+requires-python = ">=3.12,<3.13"
+
+[tool.setuptools.packages.find]
+where = ["src"]

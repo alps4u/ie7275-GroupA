@@ -1,0 +1,14 @@
+# Local datasets (raw extracts and processed tables). Do not push.
+data/
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.env
+
+# Generated model and report outputs
+artifacts/

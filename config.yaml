@@ -1,0 +1,92 @@
+paths:
+  raw: data/raw
+  processed: data/processed
+  processed_csv: data/processed_csv
+  artifacts: artifacts
+
+seed: 42
+
+split:
+  train: 0.6
+  val: 0.2
+  test: 0.2
+
+cohort:
+  readmit_window_days: 365
+  min_age: 18
+  planned_admission_types:
+    - ELECTIVE
+    - SURGICAL SAME DAY ADMISSION
+  icu_units:
+    - Medical Intensive Care Unit (MICU)
+    - Surgical Intensive Care Unit (SICU)
+    - Medical/Surgical Intensive Care Unit (MICU/SICU)
+    - Coronary Care Unit (CCU)
+    - Cardiac Vascular Intensive Care Unit (CVICU)
+    - Trauma SICU (TSICU)
+    - Neuro Surgical Intensive Care Unit (Neuro SICU)
+    - Intensive Care Unit (ICU)
+  non_ward_units:
+    - Emergency Department
+    - Emergency Department Observation
+    - Discharge Lounge
+    - UNKNOWN
+    - Unknown
+
+snapshot:
+  hour: 8
+  horizons_hours: [24, 48]
+  lookback_hours: 24
+
+# name: [itemid, plausible_min, plausible_max]; values outside the range are treated as errors
+labs:
+  creatinine: [50912, 0.1, 25]
+  bun: [51006, 1, 300]
+  sodium: [50983, 100, 185]
+  potassium: [50971, 1.5, 10]
+  chloride: [50902, 60, 150]
+  bicarbonate: [50882, 3, 60]
+  anion_gap: [50868, -10, 60]
+  magnesium: [50960, 0.3, 10]
+  calcium: [50893, 3, 20]
+  glucose: [50931, 10, 2000]
+  wbc: [51301, 0, 500]
+  hemoglobin: [51222, 1, 25]
+  platelets: [51265, 1, 2500]
+  inr: [51237, 0.5, 25]
+  bilirubin: [50885, 0, 80]
+  albumin: [50862, 0.5, 7]
+  troponin_t: [51003, 0, 30]
+  lactate: [50813, 0.1, 35]
+  ph: [50820, 6.5, 8.0]
+  po2: [50821, 10, 700]
+  pco2: [50818, 5, 200]
+
+# regex matched against the lower-cased drug name
+drug_classes:
+  antibiotic: "vancomycin|piperacillin|cefepime|ceftriaxone|meropenem|cefazolin|levofloxacin|ciprofloxacin|metronidazole|ampicillin|azithromycin|ceftazidime|aztreonam|linezolid|daptomycin|gentamicin|tobramycin|clindamycin|nafcillin|ertapenem|cefoxitin|cefuroxime"
+  vasopressor: "norepinephrine|epinephrine|phenylephrine|vasopressin|dopamine|dobutamine"
+  diuretic: "furosemide|bumetanide|torsemide|chlorothiazide|metolazone"
+  opioid: "morphine|hydromorphone|oxycodone|fentanyl|methadone"
+  insulin: "insulin"
+  anticoagulant: "heparin|enoxaparin|warfarin|apixaban|rivaroxaban|argatroban"
+iv_routes: ["IV", "IV DRIP", "IV BOLUS", "IVPCA"]
+
+# ICD code prefixes (ICD-9 and ICD-10) for comorbidities from prior admissions
+comorbidities:
+  chf: ["428", "I50"]
+  copd: ["491", "492", "496", "J44"]
+  ckd: ["585", "N18"]
+  diabetes: ["250", "E10", "E11", "E13"]
+  cancer: ["14", "15", "16", "17", "18", "19", "20", "C"]
+  liver: ["571", "K70", "K74"]
+  sepsis: ["038", "99591", "99592", "A40", "A41", "R652"]
+
+# outpatient measurements before admission
+omr:
+  lookback_days: 365
+  ranges:
+    sbp: [50, 260]
+    dbp: [20, 160]
+    weight_lbs: [60, 700]
+    bmi: [10, 80]
