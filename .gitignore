@@ -1,0 +1,36 @@
+# Data (MIMIC-IV credentialed data must never be committed)
+data/
+*.csv
+*.csv.gz
+*.parquet
+
+# Model artifacts and large outputs
+artifacts/
+*.joblib
+*.pkl
+
+# Environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+
+# Credentials
+.env
+*.key
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Course documents
+doc/
+*.doc
+*.docx
