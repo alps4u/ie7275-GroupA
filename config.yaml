@@ -1,6 +1,7 @@
 paths:
   raw: data/raw
   processed: data/processed
+  processed_csv: data/processed_csv
   artifacts: artifacts
 
 seed: 42

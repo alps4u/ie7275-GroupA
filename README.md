@@ -56,6 +56,7 @@ python -m icu_forecast.clean      # ~7 min: clean raw tables, build cohort -> da
 python -m icu_forecast.split      # patient-level 60/20/20 split -> data/processed/split.csv
 python -m icu_forecast.features   # ~3 min: daily ward snapshots, labels, features -> features.parquet
 python -m icu_forecast.prepare    # train-only preprocessing -> artifacts/preprocessor.joblib
+python -m icu_forecast.export_csv # optional: CSV copies of data/processed for SQL tools -> data/processed_csv
 
 jupyter nbconvert --to notebook --execute --inplace notebooks/01_eda.ipynb notebooks/02_pca.ipynb
 
