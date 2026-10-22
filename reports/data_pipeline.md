@@ -70,54 +70,43 @@ and outpatient measurements. This is a change from M2, which mentioned vital sig
 Every table is linked through two keys: `subject_id` (the patient) and `hadm_id` (one hospital
 admission). Time columns decide **which** rows are allowed into each snapshot.
 
+### 3.1 Cohort, snapshots and labels
+
 ```mermaid
-flowchart LR
-    subgraph RAW["data/raw (read-only)"]
-        ADM[admissions]
-        PAT[patients]
-        TR[transfers]
-        ICU[icustays]
-        SV[services]
-        LAB[labevents]
-        RX[prescriptions]
-        DX[diagnoses_icd]
-        OMR[omr]
-    end
-
-    subgraph CLEAN["clean.py"]
-        COH["cohort<br/>168,908 admissions"]
-    end
-
-    subgraph SNAP["features.py: one row per ward-day at 08:00"]
-        S["snapshot<br/>(hadm_id, snapshot_time)<br/>852,813 rows"]
-        Y["labels y_24h, y_48h"]
-    end
-
-    ADM -- subject_id --> COH
-    PAT -- subject_id --> COH
-    TR -- "hadm_id: first ICU / ward time" --> COH
-    ICU -. "hadm_id: cross-check 97.2%" .-> COH
-
-    COH --> S
-    TR -- "hadm_id + time: where is the patient?" --> S
-    COH -- "first_icu_time" --> Y
-
-    S --> F1["Demographics and admission<br/>7 features"]
-    ADM -- "subject_id: earlier admissions" --> F2["History<br/>4 features"]
-    DX -- "subject_id: earlier discharges" --> F3["Comorbidities<br/>7 features"]
-    OMR -- "subject_id: before admission day" --> F4["Outpatient BP, weight, BMI<br/>4 features"]
-    SV -- "hadm_id + time" --> F5["Current service<br/>1 feature"]
-    RX -- "hadm_id + starttime < snapshot" --> F6["Medication orders, last 24 h<br/>9 features"]
-    LAB -- "hadm_id + storetime < snapshot" --> F7["21 labs x 5 statistics<br/>105 features"]
-
-    F1 & F2 & F3 & F4 & F5 & F6 & F7 --> X["features.parquet<br/>137 features"]
-    Y --> X
-    X --> P["prepare.py<br/>train-only"]
-    P --> LGB["LightGBM<br/>raw features, NaN kept"]
-    P --> LR["Logistic regression<br/>287 imputed, scaled columns"]
+flowchart TB
+    ADM["admissions<br/>546,028"] --> COH
+    PAT["patients<br/>364,627"] --> COH
+    TR["transfers<br/>2,413,581"] --> COH
+    ICU["icustays<br/>94,458"] -. "cross-check 97.2%" .-> COH
+    COH["clean.py: cohort<br/>168,908 admissions, 63,595 patients"] --> SPLIT
+    SPLIT["split.py: by patient<br/>train 60% / val 20% / test 20%"] --> S
+    TR -- "where is the patient at 08:00?" --> S
+    S["features.py: snapshots<br/>one row per ward-day at 08:00<br/>852,813 rows"] --> Y
+    COH -- "first ICU entry time" --> Y
+    Y["labels<br/>y_24h 0.80% / y_48h 1.36%"]
 ```
 
-### Why each feature group is an input to LightGBM
+### 3.2 Feature groups feeding LightGBM
+
+Each box on the left is a cleaned table; the middle box states the join key and the time rule that
+keeps the feature known at prediction time.
+
+```mermaid
+flowchart LR
+    A1["admissions, patients,<br/>transfers"] --> G1["Demographics, admission, ward unit<br/>at the snapshot<br/>7 features"]
+    A2[admissions] --> G2["History, by subject_id<br/>only earlier discharges<br/>4 features"]
+    A3[diagnoses_icd] --> G3["Comorbidities, by subject_id<br/>only earlier discharges<br/>7 features"]
+    A4[omr] --> G4["Outpatient BP, weight, BMI<br/>before the admission day<br/>4 features"]
+    A5[services] --> G5["Current service, by hadm_id<br/>last change before snapshot<br/>1 feature"]
+    A6[prescriptions] --> G6["Medication orders, by hadm_id<br/>starttime before snapshot<br/>9 features"]
+    A7[labevents] --> G7["21 labs x 5 statistics, by hadm_id<br/>storetime before snapshot<br/>105 features"]
+    G1 & G2 & G3 & G4 & G5 & G6 & G7 --> X["features.parquet<br/>137 features + 2 labels"]
+    X --> P["prepare.py<br/>fitted on train only"]
+    P --> M1["LightGBM<br/>raw, missing kept"]
+    P --> M2["Logistic regression<br/>287 imputed, scaled"]
+```
+
+### 3.3 Why each feature group is an input to LightGBM
 
 | Group | Features | Source and join | Why it predicts ICU transfer | Known at prediction time because |
 |---|---|---|---|---|
@@ -402,3 +391,39 @@ python -m icu_forecast.features
 python -m icu_forecast.prepare
 python -m icu_forecast.models.lgbm
 ```
+
+---
+
+## Appendix: figures (training split)
+
+![Figure 1](figures/fig1_class_balance.png)
+
+**Figure 1.** Share of training snapshots followed by an ICU transfer within 24 h and 48 h.
+
+![Figure 2](figures/fig2_time_to_icu.png)
+
+**Figure 2.** Hours from admission to ICU transfer; 31% of transfers happen before the first 08:00 snapshot.
+
+![Figure 3](figures/fig3_labs_vs_target.png)
+
+**Figure 3.** ICU transfer rate by decile of six key labs.
+
+![Figure 4](figures/fig4_missingness_vs_target.png)
+
+**Figure 4.** Transfer rate when a lab was or was not measured in the last 24 h.
+
+![Figure 5](figures/fig5_lab_correlation.png)
+
+**Figure 5.** Spearman correlation among the latest lab values.
+
+![Figure 6](figures/fig6_unit_and_day.png)
+
+**Figure 6.** Transfer rate by ward unit and by day of stay.
+
+![Figure 7](figures/fig7_pca_scree.png)
+
+**Figure 7.** Variance explained by the principal components of the 13 routine labs.
+
+![Figure 8](figures/fig8_lgbm_importance.png)
+
+**Figure 8.** Top 20 LightGBM features for the 24 h model, by share of split gain.
