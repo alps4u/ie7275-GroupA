@@ -2,7 +2,7 @@
 
 Requires Microsoft Edge (or Chrome) and an internet connection for mermaid.js.
 
-Run: python reports/build_pdf.py data_pipeline.md
+Run: python reports/build_pdf.py data_pipeline.md [output.pdf]
 """
 
 import html
@@ -55,7 +55,8 @@ def to_html(md_text: str) -> str:
 
 def main() -> None:
     src = HERE / (sys.argv[1] if len(sys.argv) > 1 else "data_pipeline.md")
-    html_path, pdf_path = src.with_suffix(".html"), src.with_suffix(".pdf")
+    html_path = src.with_suffix(".html")
+    pdf_path = HERE / sys.argv[2] if len(sys.argv) > 2 else src.with_suffix(".pdf")
     html_path.write_text(to_html(src.read_text(encoding="utf-8")), encoding="utf-8")
 
     tmp_pdf = pdf_path.with_suffix(".tmp.pdf")

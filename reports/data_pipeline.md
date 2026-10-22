@@ -1,132 +1,6 @@
-# Data Pipeline: Selection, Cleaning, Split, Features, Preparation
+# Data Pipeline: Configuration, Cleaning, Split, Features, Preparation
 
-Internal technical documentation of the data pipeline in `src/icu_forecast/`, for the group to
-understand and defend the work. All numbers come from `data/processed/cleaning_report.json`,
-`data/processed/features_report.json`, and the training split. Only aggregate counts are shown:
-the MIMIC-IV data use agreement does not allow publishing patient-level rows.
-
----
-
-## 1. Task the data must serve
-
-From the M2 proposal: for **frequently admitted inpatients**, predict an **unplanned ward-to-ICU
-transfer within 24 h and 48 h**, scored once a day, and flag the top 10% highest-risk patients.
-
-This defines what the data must provide:
-
-| Need | Why |
-|---|---|
-| Admission history per patient | to define "frequently admitted" |
-| Exact location and time of every ward and ICU stay | to build daily ward snapshots and the label |
-| Admission type | to exclude planned (elective) ICU admissions |
-| Clinical signals recorded **on the ward, before** the transfer | to make features that are known at prediction time |
-
----
-
-## 2. Data selection
-
-### 2.1 Before and after
-
-| | Before (downloaded) | After (copied to `data/raw/`) |
-|---|---|---|
-| Tables | 31 (22 `hosp`, 9 `icu`) | 11 (10 `hosp`, 1 `icu`) |
-| Compressed size | about 12 GB | about 3.4 GB |
-
-### 2.2 Tables used and their role
-
-| Table | Raw rows | Role |
-|---|---|---|
-| `hosp/admissions` | 546,028 | cohort, admission type, admission/discharge/death times |
-| `hosp/patients` | 364,627 | sex, age |
-| `hosp/transfers` | 2,413,581 | ward and ICU stays with times: snapshots and label |
-| `icu/icustays` | 94,458 | cross-check of ICU entry times |
-| `hosp/services` | 593,071 | current clinical service (medicine, surgery, ...) |
-| `hosp/labevents` + `d_labitems` | 158,374,764 | main dynamic features: 21 lab tests |
-| `hosp/prescriptions` | 20,292,611 | medication orders by drug class |
-| `hosp/diagnoses_icd` + `d_icd_diagnoses` | 6,364,488 | comorbidities from **earlier** admissions |
-| `hosp/omr` | 7,753,027 | outpatient blood pressure, weight, BMI before admission |
-
-### 2.3 Tables excluded and why
-
-| Table(s) | Reason |
-|---|---|
-| `icu/chartevents`, `inputevents`, `outputevents`, `procedureevents`, `datetimeevents`, `ingredientevents` | Every row belongs to an ICU stay, i.e. is recorded **after** the outcome. Using them would leak the answer. |
-| `emar`, `emar_detail`, `pharmacy` | Overlap with `prescriptions`; about 2 GB more for little new information at this stage. |
-| `poe`, `poe_detail` | Contain the "transfer to ICU" order itself: leakage risk. |
-| `procedures_icd`, `hcpcsevents`, `drgcodes` | Coded at discharge: unknown at prediction time. |
-| `microbiologyevents` | Useful later (culture orders signal infection); deferred to M4. |
-| `d_hcpcs`, `d_icd_procedures`, `provider`, `caregiver`, `d_items` | Dictionaries for unused tables. |
-
-### 2.4 Important consequence
-
-MIMIC-IV records vital signs (heart rate, blood pressure, oxygen) **only inside the ICU**. Ward patients
-have no vital signs in this data, so the features are driven by labs, medication orders, history,
-and outpatient measurements. This is a change from M2, which mentioned vital signs.
-
----
-
-## 3. Connection map: from raw tables to the LightGBM input
-
-Every table is linked through two keys: `subject_id` (the patient) and `hadm_id` (one hospital
-admission). Time columns decide **which** rows are allowed into each snapshot.
-
-### 3.1 Cohort, snapshots and labels
-
-Each input box shows the raw row count (as downloaded) and the count after cleaning in `clean.py`.
-
-```mermaid
-flowchart TB
-    ADM["admissions<br/>raw 546,028<br/>cleaned 545,848"] --> COH
-    PAT["patients<br/>raw 364,627<br/>unchanged, joined by subject_id"] --> COH
-    TR["transfers<br/>raw 2,413,581<br/>cleaned 1,458,577"] --> COH
-    ICU["icustays<br/>raw 94,458<br/>check only, not an input"] -. "ICU times agree 97.2%" .-> COH
-    COH["cohort: 168,908 admissions, 63,595 patients<br/>transfers kept for cohort: 445,289"] --> SPLIT
-    SPLIT["split.py: by patient<br/>train 60% / val 20% / test 20%"] --> S
-    COH -- "ward location at 08:00" --> S
-    S["features.py: snapshots<br/>one row per ward-day at 08:00<br/>852,813 rows"] --> Y
-    Y["labels from first ICU entry time<br/>y_24h 0.80% / y_48h 1.36%"]
-```
-
-### 3.2 Feature groups feeding LightGBM
-
-Each box on the left is a cleaned table; the middle box states the join key and the time rule that
-keeps the feature known at prediction time.
-
-```mermaid
-flowchart LR
-    A1["admissions, patients,<br/>transfers"] --> G1["Demographics, admission, ward unit<br/>at the snapshot<br/>7 features"]
-    A2[admissions] --> G2["History, by subject_id<br/>only earlier discharges<br/>4 features"]
-    A3[diagnoses_icd] --> G3["Comorbidities, by subject_id<br/>only earlier discharges<br/>7 features"]
-    A4[omr] --> G4["Outpatient BP, weight, BMI<br/>before the admission day<br/>4 features"]
-    A5[services] --> G5["Current service, by hadm_id<br/>last change before snapshot<br/>1 feature"]
-    A6[prescriptions] --> G6["Medication orders, by hadm_id<br/>starttime before snapshot<br/>9 features"]
-    A7[labevents] --> G7["21 labs x 5 statistics, by hadm_id<br/>storetime before snapshot<br/>105 features"]
-    G1 & G2 & G3 & G4 & G5 & G6 & G7 --> X["features.parquet<br/>137 features + 2 labels"]
-    X --> P["prepare.py<br/>fitted on train only"]
-    P --> M1["LightGBM<br/>raw, missing kept"]
-    P --> M2["Logistic regression<br/>287 imputed, scaled"]
-```
-
-### 3.3 Why each feature group is an input to LightGBM
-
-| Group | Features | Source and join | Why it predicts ICU transfer | Known at prediction time because |
-|---|---|---|---|---|
-| Demographics, admission | age, sex, admission type and location, ward unit, hours since admission, days since previous discharge | `admissions`, `patients`, `transfers` | older patients and some units (cardiology, transplant) carry more risk; risk changes over the stay (Figure 6) | recorded at admission or at the snapshot |
-| History | prior admissions (total, last 365 days), prior ICU stay, length of previous stay | `admissions` by `subject_id` | frequent and recent admissions mark fragile patients | only admissions discharged before this one |
-| Comorbidities | heart failure, COPD, chronic kidney disease, diabetes, cancer, liver disease, sepsis | `diagnoses_icd` by `subject_id` | chronic disease raises the chance of decompensation | only diagnoses from **earlier** discharges |
-| Outpatient | systolic and diastolic BP, weight, BMI | `omr` by `subject_id` | baseline health status | measured before the admission day |
-| Service | current service | `services` by `hadm_id` and time | medical and surgical services differ in risk | last service change before the snapshot |
-| Medications | new orders, new IV orders, and antibiotics, IV antibiotics, vasopressors, diuretics, opioids, insulin, anticoagulants in the last 24 h | `prescriptions` by `hadm_id` | escalation of treatment (IV antibiotics, diuretics) signals deterioration | `starttime` before the snapshot |
-| Labs | last value, change since previous, min, max, and count over 24 h for 21 tests | `labevents` by `hadm_id` | abnormal and worsening labs (lactate, BUN, WBC) and labs being **ordered at all** signal concern (Figures 3, 4) | result **released** (`storetime`) before the snapshot |
-
-The 21 labs: creatinine, BUN, sodium, potassium, chloride, bicarbonate, anion gap, magnesium, calcium,
-glucose, WBC, hemoglobin, platelets, INR, bilirubin, albumin, troponin T, lactate, pH, pO2, pCO2.
-They cover kidney function, electrolytes and acid-base balance, infection and blood counts, liver,
-heart, and tissue perfusion.
-
----
-
-## 4. Configuration (`config.yaml`)
+## 1. Configuration (`config.yaml`)
 
 All decisions live in one file, so the code contains no hard-coded paths or numbers.
 
@@ -145,9 +19,9 @@ All decisions live in one file, so the code contains no hard-coded paths or numb
 
 ---
 
-## 5. Cleaning (`clean.py`): before and after
+## 2. Cleaning (`clean.py`): before and after
 
-### 5.1 Admissions
+### 2.1 Admissions
 
 | Step | Before | Removed or changed | After |
 |---|---|---|---|
@@ -157,7 +31,7 @@ All decisions live in one file, so the code contains no hard-coded paths or numb
 | Death time before admission time | | 11 set to missing | 545,848 |
 | Admission overlapping the previous stay | | 47 flagged (not counted as readmissions) | 545,848 |
 
-### 5.2 Transfers
+### 2.2 Transfers
 
 | Step | Before | Removed | After |
 |---|---|---|---|
@@ -170,7 +44,7 @@ All decisions live in one file, so the code contains no hard-coded paths or numb
 
 Check: the first ICU entry from `transfers` matches `icustays` within 1 minute for **97.2%** of admissions.
 
-### 5.3 Cohort construction
+### 2.3 Cohort construction
 
 | Step | Rule | Admissions after | Removed |
 |---|---|---|---|
@@ -187,7 +61,7 @@ Why the frequent-admission rule is applied per admission (has a previous admissi
 and not per patient: a per-patient rule would use **future** admissions to decide who is in the cohort,
 which the model cannot know at prediction time.
 
-### 5.4 Labs (`labevents`, 2.6 GB)
+### 2.4 Labs (`labevents`, 2.6 GB)
 
 Streamed in 64 MB blocks with pyarrow, keeping only cohort admissions and the 21 selected tests.
 
@@ -205,7 +79,7 @@ potassium 9, others 32. These are recording or unit errors (e.g. a pH of 70), no
 so they are removed. Genuine extremes inside the range are kept: a lactate of 15 mmol/L is rare but real
 and is exactly the signal the model needs.
 
-### 5.5 Prescriptions
+### 2.5 Prescriptions
 
 | Step | Before | Removed | After |
 |---|---|---|---|
@@ -217,7 +91,7 @@ and is exactly the signal the model needs.
 Drug names were lower-cased and grouped into classes: anticoagulant 344,985 orders, opioid 318,794,
 antibiotic 283,517, insulin 266,277, diuretic 192,395, vasopressor 15,571.
 
-### 5.6 Outpatient measurements (`omr`)
+### 2.6 Outpatient measurements (`omr`)
 
 | Step | Before | Removed | After |
 |---|---|---|---|
@@ -227,14 +101,14 @@ antibiotic 283,517, insulin 266,277, diuretic 192,395, vasopressor 15,571.
 | Implausible (diastolic 1,148, BMI 642, weight 615, systolic 10) | | 2,415 | |
 | Same patient, day and measure averaged | | | **4,729,798** |
 
-### 5.7 Diagnoses and services
+### 2.7 Diagnoses and services
 
 | Table | Before | Removed | After |
 |---|---|---|---|
 | Diagnoses (cohort patients) | | 301 duplicate codes | 4,304,433 |
 | Services (cohort admissions) | | 0 duplicates | 184,113 |
 
-### 5.8 Output files (`data/processed/`)
+### 2.8 Output files (`data/processed/`)
 
 | File | Rows | Columns |
 |---|---|---|
@@ -249,7 +123,7 @@ antibiotic 283,517, insulin 266,277, diuretic 192,395, vasopressor 15,571.
 
 ---
 
-## 6. Split (`split.py`): before and after
+## 3. Split (`split.py`): before and after
 
 Before: 168,908 admissions from 63,595 patients in one table.
 After: every **patient** is assigned to exactly one split, stratified by whether the patient ever had
@@ -268,9 +142,9 @@ evaluation.
 
 ---
 
-## 7. Features (`features.py`): before and after
+## 4. Features (`features.py`): before and after
 
-### 7.1 From admissions to daily snapshots
+### 4.1 From admissions to daily snapshots
 
 | Step | Rows |
 |---|---|
@@ -279,7 +153,7 @@ evaluation.
 | Dropped: patient not on a ward at 08:00 (still in the emergency department, discharge lounge, ...) | 11,254 |
 | **Final snapshots** | **852,813** |
 
-### 7.2 Illustrative example (fictional patient, not real data)
+### 4.2 Illustrative example (fictional patient, not real data)
 
 ```
 Day 0  14:00  admitted from the emergency department to a Medicine ward
@@ -291,7 +165,7 @@ Day 2  21:00  transferred to MICU
               no snapshot on day 3: the patient is already in the ICU
 ```
 
-### 7.3 Labels
+### 4.3 Labels
 
 | Label | Rule | Positive snapshots | Rate |
 |---|---|---|---|
@@ -302,7 +176,7 @@ Coverage limit: 3,524 of the 10,377 transfers (34%) happen before the first 08:0
 a quarter of transfers occur within about 6 hours of admission. These early deteriorations cannot be
 predicted with morning snapshots and should be discussed in the report.
 
-### 7.4 Leakage checks (all passed)
+### 4.4 Leakage checks (all passed)
 
 | Check | Result |
 |---|---|
@@ -312,7 +186,7 @@ predicted with morning snapshots and should be discussed in the report.
 | Labs used only if released before the snapshot (`storetime`, not draw time) | by construction |
 | Diagnoses only from earlier discharges | by construction |
 
-### 7.5 Output
+### 4.5 Output
 
 | | Before | After |
 |---|---|---|
@@ -321,19 +195,19 @@ predicted with morning snapshots and should be discussed in the report.
 
 ---
 
-## 8. Preparation (`prepare.py`): before and after
+## 5. Preparation (`prepare.py`): before and after
 
 All statistics are fitted on the **training split only** (513,555 snapshots) and then applied to
 validation and test.
 
-### 8.1 Two views of the same features
+### 5.1 Two views of the same features
 
 | Model | Input | Missing values | Scaling | Categoricals |
 |---|---|---|---|---|
 | LightGBM | 137 raw features | kept as missing: the model learns that "lab not ordered" is informative (Figure 4) | not needed for trees | pandas categories, levels from train |
 | Logistic regression | 287 columns | median of train + 88 missing-indicator columns | standardized (mean 0, sd 1) | one-hot: 66 columns |
 
-### 8.2 Before and after, training split
+### 5.2 Before and after, training split
 
 | Feature | Before: mean | Before: sd | Before: missing | Median used to fill | After: mean | After: sd | After: missing |
 |---|---|---|---|---|---|---|---|
@@ -347,7 +221,7 @@ validation and test.
 
 Overall, 34.8% of numeric cells in the training data are missing before preparation and 0% after.
 
-### 8.3 Categorical encoding
+### 5.3 Categorical encoding
 
 | Variable | Levels in train | One-hot columns |
 |---|---|---|
@@ -359,7 +233,7 @@ Overall, 34.8% of numeric cells in the training data are missing before preparat
 Levels seen in less than 0.1% of training rows are merged into an "infrequent" column; levels never seen
 in training are handled without error.
 
-### 8.4 Dimension reduction (`notebooks/02_pca.ipynb`)
+### 5.4 Dimension reduction (`notebooks/02_pca.ipynb`)
 
 PCA on the 13 routine labs (under 30% missing): 8 components are needed for 80% of the variance and 10
 for 90%, so compression is small, and the components are harder to explain than named labs. Decision:
@@ -367,7 +241,7 @@ keep the raw lab features for LightGBM.
 
 ---
 
-## 9. Result of the pipeline: first LightGBM test (validation split)
+## 6. Result of the pipeline: first LightGBM test (validation split)
 
 | Model | Window | ROC-AUC | PR-AUC | Recall in top 10% | Precision in top 10% |
 |---|---|---|---|---|---|
@@ -382,7 +256,7 @@ labevents as the core input tables.
 
 ---
 
-## 10. How to reproduce
+## 7. How to reproduce
 
 ```bash
 pip install -r requirements.txt
