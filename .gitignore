@@ -34,3 +34,6 @@ Thumbs.db
 doc/
 *.doc
 *.docx
+
+# Temporary PDF builds
+*.tmp.pdf

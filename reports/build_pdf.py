@@ -58,12 +58,17 @@ def main() -> None:
     html_path, pdf_path = src.with_suffix(".html"), src.with_suffix(".pdf")
     html_path.write_text(to_html(src.read_text(encoding="utf-8")), encoding="utf-8")
 
+    tmp_pdf = pdf_path.with_suffix(".tmp.pdf")
+    tmp_pdf.unlink(missing_ok=True)
     browser = next(b for b in BROWSERS if b.exists())
     subprocess.run([
         str(browser), "--headless=new", "--disable-gpu", "--no-pdf-header-footer",
-        "--virtual-time-budget=15000", f"--print-to-pdf={pdf_path}", html_path.as_uri(),
+        "--virtual-time-budget=15000", f"--print-to-pdf={tmp_pdf}", html_path.as_uri(),
     ], check=True)
     html_path.unlink()
+    if not tmp_pdf.exists():
+        raise RuntimeError("the browser did not produce a PDF")
+    tmp_pdf.replace(pdf_path)
     print(f"wrote {pdf_path}")
 
 

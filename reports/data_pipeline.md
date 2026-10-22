@@ -72,18 +72,19 @@ admission). Time columns decide **which** rows are allowed into each snapshot.
 
 ### 3.1 Cohort, snapshots and labels
 
+Each input box shows the raw row count (as downloaded) and the count after cleaning in `clean.py`.
+
 ```mermaid
 flowchart TB
-    ADM["admissions<br/>546,028"] --> COH
-    PAT["patients<br/>364,627"] --> COH
-    TR["transfers<br/>2,413,581"] --> COH
-    ICU["icustays<br/>94,458"] -. "cross-check 97.2%" .-> COH
-    COH["clean.py: cohort<br/>168,908 admissions, 63,595 patients"] --> SPLIT
+    ADM["admissions<br/>raw 546,028<br/>cleaned 545,848"] --> COH
+    PAT["patients<br/>raw 364,627<br/>unchanged, joined by subject_id"] --> COH
+    TR["transfers<br/>raw 2,413,581<br/>cleaned 1,458,577"] --> COH
+    ICU["icustays<br/>raw 94,458<br/>check only, not an input"] -. "ICU times agree 97.2%" .-> COH
+    COH["cohort: 168,908 admissions, 63,595 patients<br/>transfers kept for cohort: 445,289"] --> SPLIT
     SPLIT["split.py: by patient<br/>train 60% / val 20% / test 20%"] --> S
-    TR -- "where is the patient at 08:00?" --> S
+    COH -- "ward location at 08:00" --> S
     S["features.py: snapshots<br/>one row per ward-day at 08:00<br/>852,813 rows"] --> Y
-    COH -- "first ICU entry time" --> Y
-    Y["labels<br/>y_24h 0.80% / y_48h 1.36%"]
+    Y["labels from first ICU entry time<br/>y_24h 0.80% / y_48h 1.36%"]
 ```
 
 ### 3.2 Feature groups feeding LightGBM
