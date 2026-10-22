@@ -4,7 +4,7 @@ paths:
   processed_csv: data/processed_csv
   artifacts: artifacts
 
-seed: 42
+seed: 7275    # changed to follow lab guide for 7275 class
 
 split:
   train: 0.6
@@ -30,6 +30,15 @@ cohort:
     - Emergency Department
     - Emergency Department Observation
     - Discharge Lounge
+    - Labor & Delivery  # added as non_ward_units
+    - Nursery           # added as non_ward_units
+    - Observation       # added as non_ward_units
+    - Obstetrics (Postpartum & Antepartum)  # added as non_ward_units
+    - Obstetrics Antepartum                 # added as non_ward_units
+    - Obstetrics Postpartum                 # added as non_ward_units
+    - PACU              # added as non_ward_units
+    - Psychiatry        # added as non_ward_units
+    - Special Care Nursery (SCN)            # added as non_ward_units
     - UNKNOWN
     - Unknown
 
