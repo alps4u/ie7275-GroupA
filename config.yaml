@@ -79,6 +79,8 @@ drug_classes:
   opioid: "morphine|hydromorphone|oxycodone|fentanyl|methadone"
   insulin: "insulin"
   anticoagulant: "heparin|enoxaparin|warfarin|apixaban|rivaroxaban|argatroban"
+  # Added ACE inhibitors refering from https://github.com/MIT-LCP/mimic-code/blob/main/mimic-iv/concepts/medication/acei.sql
+  acei: "benazepril|captopril|enalapril|fosinopril|lisinopril|moexipril|perindopril|quinapril|ramipril|trandolapril" 
 iv_routes: ["IV", "IV DRIP", "IV BOLUS", "IVPCA"]
 
 # ICD code prefixes (ICD-9 and ICD-10) for comorbidities from prior admissions
