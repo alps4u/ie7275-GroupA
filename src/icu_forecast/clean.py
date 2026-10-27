@@ -77,7 +77,8 @@ def clean_admissions(raw: Path, cfg: dict, report: dict) -> pd.DataFrame:
     gap_days = (adm.admittime - prev_disch).dt.total_seconds() / 86400
     note(report, "admissions_overlapping_previous_stay", (gap_days < 0).sum())
     adm["days_since_prev_disch"] = gap_days
-    adm["readmit"] = gap_days.between(0, cfg["cohort"]["readmit_window_days"])
+    min_gap = cfg["cohort"].get("min_readmit_hours", 0) / 24
+    adm["readmit"] = gap_days.between(min_gap, cfg["cohort"]["readmit_window_days"])
     return adm
 
 

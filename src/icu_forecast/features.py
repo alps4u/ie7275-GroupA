@@ -95,7 +95,11 @@ def omr_features(cohort: pd.DataFrame, omr: pd.DataFrame, cfg: dict) -> pd.DataF
 
 
 def lab_features(keys: pd.DataFrame, labs: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """Last value and change since the previous value, plus min/max/count over the last 24h."""
+    """Last value, change since the previous value, and how often the lab was measured in 24h.
+
+    min24h and max24h are not built: when a lab is drawn once in the window they equal
+    last (Spearman > 0.93 on the training split), so they add no new signal.
+    """
     if cfg["snapshot"]["lookback_hours"] != 24:
         raise ValueError("lab window bucketing assumes a 24h lookback with daily snapshots")
     keys = keys.sort_values("snapshot_time").reset_index(drop=True)
@@ -112,9 +116,12 @@ def lab_features(keys: pd.DataFrame, labs: pd.DataFrame, cfg: dict) -> pd.DataFr
         out[f"{name}_last"] = m.valuenum
         out[f"{name}_delta"] = m.valuenum - m.prev_value
 
+    stats = cfg["snapshot"].get("lab_window_stats", ["count"])
+    if stats != ["count"]:
+        raise ValueError("only count is supported for the 24h lab window after dropping min/max")
     labs["snapshot_time"] = next_snapshot(labs.storetime, cfg["snapshot"]["hour"])
-    w = labs.groupby([*KEYS, "lab"]).valuenum.agg(["min", "max", "count"]).unstack("lab")
-    w.columns = [f"{lab}_{stat}24h" for stat, lab in w.columns]
+    w = labs.groupby([*KEYS, "lab"]).valuenum.count().unstack("lab")
+    w.columns = [f"{lab}_count24h" for lab in w.columns]
     out = out.merge(w, left_on=KEYS, right_index=True, how="left")
     count_cols = [c for c in out if c.endswith("_count24h")]
     out[count_cols] = out[count_cols].fillna(0)

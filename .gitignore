@@ -9,6 +9,9 @@ artifacts/
 *.joblib
 *.pkl
 
+# M4 model code (keep out of M3)
+src/icu_forecast/models/
+
 # Environments and caches
 .venv/
 venv/

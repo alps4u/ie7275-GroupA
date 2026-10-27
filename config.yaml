@@ -4,7 +4,7 @@ paths:
   processed_csv: data/processed_csv
   artifacts: artifacts
 
-seed: 42
+seed: 7275
 
 split:
   train: 0.6
@@ -13,6 +13,7 @@ split:
 
 cohort:
   readmit_window_days: 365
+  min_readmit_hours: 1
   min_age: 18
   planned_admission_types:
     - ELECTIVE
@@ -30,6 +31,15 @@ cohort:
     - Emergency Department
     - Emergency Department Observation
     - Discharge Lounge
+    - Labor & Delivery
+    - Nursery
+    - Observation
+    - Obstetrics (Postpartum & Antepartum)
+    - Obstetrics Antepartum
+    - Obstetrics Postpartum
+    - PACU
+    - Psychiatry
+    - Special Care Nursery (SCN)
     - UNKNOWN
     - Unknown
 
@@ -37,6 +47,8 @@ snapshot:
   hour: 8
   horizons_hours: [24, 48]
   lookback_hours: 24
+  # last / delta / count only: min24h and max24h match last (Spearman > 0.93) when a lab is drawn once a day
+  lab_window_stats: [count]
 
 # name: [itemid, plausible_min, plausible_max]; values outside the range are treated as errors
 labs:
@@ -70,6 +82,7 @@ drug_classes:
   opioid: "morphine|hydromorphone|oxycodone|fentanyl|methadone"
   insulin: "insulin"
   anticoagulant: "heparin|enoxaparin|warfarin|apixaban|rivaroxaban|argatroban"
+  acei: "benazepril|captopril|enalapril|fosinopril|lisinopril|moexipril|perindopril|quinapril|ramipril|trandolapril"
 iv_routes: ["IV", "IV DRIP", "IV BOLUS", "IVPCA"]
 
 # ICD code prefixes (ICD-9 and ICD-10) for comorbidities from prior admissions
