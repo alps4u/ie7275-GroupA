@@ -4,7 +4,7 @@ paths:
   processed_csv: data/processed_csv
   artifacts: artifacts
 
-seed: 42
+seed: 7275    # changed to follow lab guide for 7275 class
 
 split:
   train: 0.6
@@ -30,6 +30,15 @@ cohort:
     - Emergency Department
     - Emergency Department Observation
     - Discharge Lounge
+    - Labor & Delivery  # added as non_ward_units
+    - Nursery           # added as non_ward_units
+    - Observation       # added as non_ward_units
+    - Obstetrics (Postpartum & Antepartum)  # added as non_ward_units
+    - Obstetrics Antepartum                 # added as non_ward_units
+    - Obstetrics Postpartum                 # added as non_ward_units
+    - PACU              # added as non_ward_units
+    - Psychiatry        # added as non_ward_units
+    - Special Care Nursery (SCN)            # added as non_ward_units
     - UNKNOWN
     - Unknown
 
@@ -70,6 +79,8 @@ drug_classes:
   opioid: "morphine|hydromorphone|oxycodone|fentanyl|methadone"
   insulin: "insulin"
   anticoagulant: "heparin|enoxaparin|warfarin|apixaban|rivaroxaban|argatroban"
+  # Added ACE inhibitors refering from https://github.com/MIT-LCP/mimic-code/blob/main/mimic-iv/concepts/medication/acei.sql
+  acei: "benazepril|captopril|enalapril|fosinopril|lisinopril|moexipril|perindopril|quinapril|ramipril|trandolapril" 
 iv_routes: ["IV", "IV DRIP", "IV BOLUS", "IVPCA"]
 
 # ICD code prefixes (ICD-9 and ICD-10) for comorbidities from prior admissions
