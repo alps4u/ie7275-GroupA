@@ -113,7 +113,9 @@ def lab_features(keys: pd.DataFrame, labs: pd.DataFrame, cfg: dict) -> pd.DataFr
         out[f"{name}_delta"] = m.valuenum - m.prev_value
 
     labs["snapshot_time"] = next_snapshot(labs.storetime, cfg["snapshot"]["hour"])
-    w = labs.groupby([*KEYS, "lab"]).valuenum.agg(["min", "max", "count"]).unstack("lab")
+    # w = labs.groupby([*KEYS, "lab"]).valuenum.agg(["min", "max", "count"]).unstack("lab")
+    # Dimension reduction: remove min and max aggregation to optimize feature set
+    w = labs.groupby([*KEYS, "lab"]).valuenum.agg(["count"]).unstack("lab")
     w.columns = [f"{lab}_{stat}24h" for stat, lab in w.columns]
     out = out.merge(w, left_on=KEYS, right_index=True, how="left")
     count_cols = [c for c in out if c.endswith("_count24h")]
