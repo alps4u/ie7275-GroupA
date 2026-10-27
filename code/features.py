@@ -95,7 +95,8 @@ def omr_features(cohort: pd.DataFrame, omr: pd.DataFrame, cfg: dict) -> pd.DataF
 
 
 def lab_features(keys: pd.DataFrame, labs: pd.DataFrame, cfg: dict) -> pd.DataFrame:
-    """Last value and change since the previous value, plus min/max/count over the last 24h."""
+    # """Last value and change since the previous value, plus min/max/count over the last 24h."""
+    """Last value and change since the previous value, plus count over the last 24h."""
     if cfg["snapshot"]["lookback_hours"] != 24:
         raise ValueError("lab window bucketing assumes a 24h lookback with daily snapshots")
     keys = keys.sort_values("snapshot_time").reset_index(drop=True)
